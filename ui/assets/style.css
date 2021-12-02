@@ -1,0 +1,33 @@
+body {
+    font-family: Arial, Helvetica, sans-serif;
+    overflow-x: hidden;
+    background-color: #0e1012;
+    font-size: 16;
+    color: #fff;
+    margin: 0;
+    padding: 0;
+}
+
+#header {
+    width: 100%;
+    margin: 0;
+    background-color: #0e1012;
+    color: #fff;
+    text-align: center;
+}
+
+#temperature, #distance, #gyroscope, #accelerometer, #left_pressure, #right_pressure {
+    color: #fff;
+    margin-left: 30%;
+}
+
+#download-button, #title, #stop-button {
+    position: relative;
+    display: flex;
+    -moz-box-align: center;
+    align-items: center;
+    -moz-box-pack: start;
+    justify-content: flex-start;
+    flex-direction: row;
+    margin-left: 30%;
+} 
