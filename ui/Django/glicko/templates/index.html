@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+
+<head>
+    <meta charset="utf-8">
+    {% block title %}
+    <title>Glicko Ride</title>
+    {% endblock %}
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <!-- Latest compiled and minified CSS -->
+    <link rel="stylesheet" href="//use.fontawesome.com/releases/v5.0.7/css/all.css">
+    <link
+        href="https://fonts.googleapis.com/css?family=Nunito:200,200i,300,300i,400,400i,600,600i,700,700i,800,800i,900,900i"
+        rel="stylesheet">
+
+    <!-- jQuery library -->
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
+    <script src="//maxcdn.bootstrapcdn.com/bootstrap/3.2.0/js/bootstrap.min.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet"
+        integrity="sha384-EVSTQN3/azprG1Anm3QDgpJLIm9Nao0Yz1ztcQTwFspd3yD65VohhpuuCOmLASjC" crossorigin="anonymous">
+
+</head>
+
+
+<body class="container-fluid" style="padding: 1%;">
+    <div class="row">
+        <div class="col-3">
+
+            <h1>Glicko Ride</h1>
+
+
+            <div class="card">
+                <div class="card-body">
+                    <i class="fa fa-solid fa-user"></i>
+                    <span>Users</span>
+                    <p id="user" class="card-text">We reached users so far.</p>
+                </div>
+            </div>
+            <hr class="sidebar-divider">
+
+
+            <div class="card">
+                <div class="card-body">
+                    <i class="fa fa-solid fa-map"></i>
+                    <span>Trips</span>
+                    <p id="trip" class="card-text"> We reached trips so far.</p>
+                </div>
+            </div>
+            </ul>
+
+        </div>
+        <div class="col-9" id="right-side">
+            <ul class="nav nav-tabs nav-fill">
+                <li class="nav-item">
+                    <a class="nav-link" data-toggle="tab" href="#Selected_charts">Charts</a>
+                </li>
+                <li class="nav-item disabled">
+                    <a class="nav-link" data-toggle="tab" href="#Selected_tables">Tables</a>
+                </li>
+            </ul>
+            <br>
+            <div class="tab-content">
+                <div class="tab-pane fade" id="Selected_charts">
+                    <div class="row">
+                        <div class="col-4">
+                            <select class="form-select dropdown-toggle form-select-sm sm-3" id="user_list"
+                                data-style="btn">
+                                <option selected disabled>Choose user</option>
+                            </select>
+                        </div>
+                        <div class="col-4">
+                            <select class="form-select dropdown-toggle form-select-sm sm-3" id="trip_list"
+                                data-style="btn">
+                                <option selected disabled>Choose trip date</option>
+                            </select>
+                        </div>
+                        <div class="col-4">
+                            <select class="form-select dropdown-toggle form-select-sm sm-3" id="sensor_reading"
+                                data-style="btn">
+                                <option selected disabled>Choose sensor readings</option>
+                                <option value="1">Accelerometer x</option>
+                                <option value="2">Accelerometer y</option>
+                                <option value="3">Accelerometer z</option>
+                                <option value="7">Distance</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div style="height:80vh; width: 100%;">
+                        <canvas id="myChartline"></canvas>
+                    </div>
+                </div>
+
+                <div class="tab-pane fade" id="Selected_tables">
+                    <div id="dv" style="height:80vh; width: 100%;">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+
+
+    <!-- <script
+        src="https://maps.googleapis.com/maps/api/js?key=AIzaSyD0gqBpow2Xo-gvNxjag9ZrITFMQOrIsUk&callback=myMap"></script> -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@2.8.0"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.21.0/cytoscape.min.js"></script>
+    <!-- <script src="https://d3js.org/d3.v3.min.js" charset="utf-8"></script> -->
+
+    <script src="https://unpkg.com/dagre@0.7.4/dist/dagre.js"></script>
+    <script src="https://cdn.rawgit.com/cytoscape/cytoscape.js-dagre/1.5.0/cytoscape-dagre.js"></script>
+    <script>
+        var data_length = 0;
+        var elements = {};
+        var user_id = null;
+        var trip_id = null;
+        var url = "";
+        var endpoint = '/api/data-fetch/';
+        var user_endpoint = '/api/user-list/?format=json';
+        var trip_endpoint = '/api/trip-list/?format=json';
+        setInterval(backendCall, 300)
+        setInterval(UpdateCall, 2000)
+
+        var plot_label = ""
+        $('#sensor_reading').change(function () {
+            plot_label = $(this).find("option:selected").text();
+        });
+
+        $('#user_list').change(function () {
+            user_id = $(this).find("option:selected").val();
+        });
+
+        $('#trip_list').change(function () {
+            trip_id = $(this).find("option:selected").val();
+        });
+
+        function get_users() {
+            var saved = Array();
+            $.ajax({
+                method: "GET",
+                async: false,
+                url: user_endpoint,
+                success: function (data) {
+                    var max = data.length,
+                        select = document.getElementById('user_list');
+
+                    for (let i = 0; i < max; i++) {
+                        var opt = document.createElement('option');
+                        opt.value = data[i].id;
+                        opt.text = data[i].email;
+                        select.appendChild(opt);
+                        saved.push(data[i]);
+                    }
+                },
+                error: function (error_data) {
+                    console.log(error_data);
+                }
+            })
+            return saved;
+        }
+
+        var users = get_users();
+
+        function get_trips() {
+            var saved = Array();
+            $.ajax({
+                method: "GET",
+                url: trip_endpoint,
+                async: false,
+                success: function (data) {
+                    var max = data.length,
+                        select = document.getElementById('trip_list');
+
+                    for (let i = 0; i < max; i++) {
+                        var opt = document.createElement('option');
+                        opt.value = data[i].id;
+                        opt.text = data[i].created_date;
+                        select.appendChild(opt);
+                        saved.push(data[i]);
+                    }
+                },
+                error: function (error_data) {
+                    console.log(error_data);
+                }
+            })
+            return saved;
+        }
+
+        var trips = Array();
+
+        var p = document.getElementById("user");
+        p.innerHTML = "We reached " + users.length + " users so far."
+
+        var p = document.getElementById("trip");
+        p.innerHTML = "We reached " + trips.length + " users so far."
+
+        drawNetwork(computeNetwork(users, trips));
+
+        function computeNetwork(users, trips) {
+            elements["nodes"] = Array();
+            elements["edges"] = Array();
+
+            elements["nodes"].push({ data: { id: 0, text: "Users", classes: "multiline-auto" } })
+            elements["nodes"].push({ data: { id: 1, text: "Trips", classes: "multiline-auto" } })
+            for (let i = 0; i < users.length; i++) {
+                elements["nodes"].push({ data: { id: users[i].id, text: users[i].email, classes: "multiline-auto" } });
+                elements["edges"].push({ data: { id: "0" + users[i].id, source: 0, target: users[i].id } });
+                for (let j = 0; j < trips.length; j++) {
+                    elements["nodes"].push({ data: { id: trips[j].id, text: trips[j].created_date, classes: "multiline-auto" } });
+                    elements["nodes"].push({ data: { id: trips[j].id + "0", text: trips[j].trip_status, classes: "multiline-auto" } });
+                    if (trips[j].publisher == users[i].id) {
+                        elements["edges"].push({ data: { id: users[i].id + trips[j].id, source: users[i].id, target: trips[j].id } })
+                    }
+                    elements["edges"].push({ data: { id: "1" + trips[j].id, source: 1, target: trips[j].id } });
+                    elements["edges"].push({ data: { id: "2" + trips[j].id, source: trips[j].id, target: trips[j].id + "0" } });
+                }
+            }
+            return elements;
+        }
+
+        function drawNetwork(elts) {
+            var cy = cytoscape({
+                container: document.getElementById('dv'),
+                style: [
+                    {
+                        selector: 'node',
+                        css: {
+                            "width": "300px",
+                            "height": "50%",
+                            "shape": "round-rectangle",
+                            "text-halign": "center",
+                            "text-valign": "center",
+                            'background-color': '#61bffc',
+                            content: 'data(text)',
+                        }
+                    },
+                    {
+                        selector: 'edge',
+                        css: {
+                            "mid-target-arrow-shape": "triangle",
+                            "arrow-scale": 1,
+                        }
+
+
+                    },
+                    {
+                        selector: ".multiline-manual",
+                        style: {
+                            "text-wrap": "wrap"
+                        }
+                    },
+
+                    {
+                        selector: ".multiline-auto",
+                        style: {
+                            "text-wrap": "wrap",
+                            "text-max-width": 80
+                        }
+                    }
+                ],
+                elements: elts,
+                layout: {
+                    name: 'dagre',
+                    directed: true,
+                    padding: 100,
+                    fit: true
+                }
+            });
+        }
+
+        function UpdateCall() {
+            var users = get_users();
+
+            var select = document.getElementById('user_list'),
+                min = select.options.length - 1;
+
+            console.log(users.length, min)
+            if (users.length != min) {
+                var p = document.getElementById("user");
+                p.innerHTML = "We reached " + users.length + " users so far."
+
+                while (select.options.length > 1) {
+                    select.remove(1);
+                }
+
+                for (let i = 0; i < users.length; i++) {
+                    var opt = document.createElement('option');
+                    opt.value = users[i].id;
+                    opt.text = users[i].email;
+                    select.appendChild(opt);
+                }
+            }
+
+            var trips = get_trips();
+            var select = document.getElementById('trip_list'),
+                new_min = select.options.length - 1;
+
+            console.log(trips.length, new_min)
+            if (trips.length != new_min) {
+                var p = document.getElementById("trip");
+                p.innerHTML = "We reached " + trips.length + " trips so far."
+
+                while (select.options.length > 1) {
+                    select.remove(1);
+                }
+
+                for (let i = 0; i < trips.length; i++) {
+                    var opt = document.createElement('option');
+                    opt.value = trips[i].id;
+                    opt.text = trips[i].created_date;
+                    select.appendChild(opt);
+                }
+            }
+
+            drawNetwork(computeNetwork(users, trips));
+        }
+
+        function backendCall() {
+            if (user_id != null && trip_id != null) {
+                url = endpoint + user_id + ";" + trip_id + "/?format=json";
+            }
+            if (url.endsWith("=json") && trip_id != null && user_id != null) {
+                $.ajax({
+                    method: "GET",
+                    url: url,
+                    success: function (data) {
+                        var label = Array();
+                        var accel_x = Array();
+                        var accel_y = Array();
+                        var accel_z = Array();
+                        var distance = Array();
+                        var saved = {};
+
+                        for (let i = 0; i < data.length; i++) {
+                            accel_x.push(data[i]["accel_x"]);
+                            accel_y.push(data[i]["accel_y"]);
+                            accel_z.push(data[i]["accel_z"]);
+                            distance.push(data[i]["distance"]);
+                            label.push(data[i]["time"]);
+                        }
+                        saved["labels"] = label;
+                        saved["accel_x"] = accel_x;
+                        saved["accel_y"] = accel_y;
+                        saved["accel_z"] = accel_z;
+                        saved["distance"] = distance;
+
+                        if (data_length != saved.length) {
+                            drawLineGraph(saved, 'myChartline');
+                        }
+                        array_length = data.length;
+
+                    },
+                    error: function (error_data) {
+                        console.log(error_data);
+                    }
+                })
+            }
+
+        }
+
+        function drawLineGraph(data, id) {
+            var labels = data.labels;
+            if (plot_label == "Accelerometer x") {
+                var chartdata = data.accel_x;
+            }
+            else if (plot_label == "Accelerometer y") {
+                var chartdata = data.accel_y;
+            }
+            else if (plot_label == "Accelerometer z") {
+                var chartdata = data.accel_z;
+            }
+            else if (plot_label == "Distance") {
+                var chartdata = data.distance;
+            }
+            var ctx = document.getElementById(id).getContext('2d');
+            var chart = new Chart(ctx, {
+                // The type of chart we want to create
+                type: 'line',
+
+                // The data for our dataset
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: plot_label,
+                        data: chartdata,
+                    },
+                    ]
+
+                },
+
+                // Configuration options go here
+                options: {
+                    animation: true,
+                    animationEasing: 'easeInOutQuart',
+                    animationSteps: 80,
+                    scales: {
+                        xAxes: [{
+                            display: true
+                        }],
+                        yAxes: [{
+                            ticks: {
+                                beginAtZero: true
+                            }
+                        }]
+                    }
+                }
+
+            });
+        }
+
+    </script>
+</body>
+
+</html>
